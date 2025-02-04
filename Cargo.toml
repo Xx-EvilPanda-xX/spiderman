@@ -1,0 +1,10 @@
+[package]
+name = "spiderman"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "0.15.1"
+
+[profile.dev]
+opt-level = 3
