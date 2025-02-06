@@ -1,9 +1,12 @@
+use bevy::pbr::wireframe::{Wireframe, WireframeConfig};
 use bevy::prelude::*;
-use bevy::color::palettes::css::PURPLE;
+use bevy::color::palettes::css::{PURPLE, RED};
+use bevy::render::mesh::MeshAabb;
 use bevy::window::PrimaryWindow;
 use bevy::pbr::PointLightShadowMap;
 
 use crate::physics;
+use crate::physics::collision::{Collidable, ShouldRenderCollider};
 
 #[derive(Component)]
 pub struct Island1;
@@ -27,22 +30,40 @@ const ROT_SPEED: f32 = 0.2;
 
 pub fn update(
     mut islands: Query<&mut Transform, With<Island1>>,
-    // entities: Query<(Entity, &Name)>,
     time: Res<Time>,
-    // mut commands: Commands,
+    pog: Query<&GlobalTransform, With<ShouldRenderCollider>>,
+    // // ayo: Option<Single<&GlobalTransform, With<super::physics::collision::AABB>>>,
+    // // cam: Single<&CameraState>,
 ) {
-    for mut island in &mut islands {
-        *island = island.with_rotation(Quat::from_rotation_y(time.elapsed_secs() * ROT_SPEED));
-    }
-
-    // debug!("------------------------------------------------------\n\n");
-    // for (i, name) in &entities {
-    //     debug!("{i:#?}, {name}");
-    //     commands.entity(i).log_components();
+    // for mut island in &mut islands {
+    //     *island = island.with_rotation(Quat::from_rotation_y(time.elapsed_secs() * ROT_SPEED));
     // }
 
-    // debug!("------------------------------------------------------\n\n");
+    // if let Some(pog) = pog {
+    //     debug!("WIREFRAME: {:?}", *pog);
+    // }
 
+    // if let Some(ayo) = ayo {
+    //     debug!("COLLIDABLE: {:?}", *ayo);
+    // }
+
+    for pog in pog.iter() {
+        // debug!("{:?}\n\n\n", pog);
+    }
+
+    // debug!("\n\n")
+
+    // debug!("{:?}", cam.pos);
+}
+
+#[allow(unused)]
+pub fn debug_ecs(entities: Query<(Entity, &ShouldRenderCollider)>, mut commands: Commands) {
+    debug!("------------------------------------------------------\n\n");
+    for (i, name) in &entities {
+        debug!("{i:#?}, {:?}", name);
+        commands.entity(i).log_components();
+    }
+    debug!("------------------------------------------------------\n\n");
 }
 
 pub fn setup(
@@ -57,6 +78,10 @@ pub fn setup(
     window.cursor_options.visible = false;
     clear_color.0 = Color::srgb(115.0/255.0, 121.0/255.0, 121.0/255.0);
     commands.insert_resource(PointLightShadowMap { size: 2048 });
+    commands.insert_resource(WireframeConfig {
+        global: false,
+        default_color: RED.into(),
+    });
 
     let island_handle = server.load(GltfAssetLabel::Scene(0).from_asset("Island1Export.gltf"));
 
@@ -64,7 +89,7 @@ pub fn setup(
         SceneRoot(island_handle.clone()),
         Transform::from_scale(Vec3::new(0.1, 0.1, 0.1)),
         Island1,
-        physics::collion::Collidable(String::from("Cube.002")),
+        physics::collision::Collidable(vec![String::from("Cube.002")]),
     ));
 
     commands.spawn((
