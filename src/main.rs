@@ -6,6 +6,7 @@ use bevy::render::settings::{RenderCreation, WgpuSettings, WgpuFeatures};
 mod game;
 mod input;
 mod physics;
+mod math;
 
 fn main() {
     App::new()

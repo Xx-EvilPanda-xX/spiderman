@@ -1,12 +1,11 @@
-use bevy::pbr::wireframe::{Wireframe, WireframeConfig};
+use bevy::pbr::wireframe::WireframeConfig;
 use bevy::prelude::*;
 use bevy::color::palettes::css::{PURPLE, RED};
-use bevy::render::mesh::MeshAabb;
 use bevy::window::PrimaryWindow;
 use bevy::pbr::PointLightShadowMap;
 
 use crate::physics;
-use crate::physics::collision::{Collidable, ShouldRenderCollider};
+use crate::physics::collision::ShouldRenderCollider;
 
 #[derive(Component)]
 pub struct Island1;
@@ -31,29 +30,10 @@ const ROT_SPEED: f32 = 0.2;
 pub fn update(
     mut islands: Query<&mut Transform, With<Island1>>,
     time: Res<Time>,
-    pog: Query<&GlobalTransform, With<ShouldRenderCollider>>,
-    // // ayo: Option<Single<&GlobalTransform, With<super::physics::collision::AABB>>>,
-    // // cam: Single<&CameraState>,
 ) {
-    // for mut island in &mut islands {
-    //     *island = island.with_rotation(Quat::from_rotation_y(time.elapsed_secs() * ROT_SPEED));
-    // }
-
-    // if let Some(pog) = pog {
-    //     debug!("WIREFRAME: {:?}", *pog);
-    // }
-
-    // if let Some(ayo) = ayo {
-    //     debug!("COLLIDABLE: {:?}", *ayo);
-    // }
-
-    for pog in pog.iter() {
-        // debug!("{:?}\n\n\n", pog);
+    for mut island in &mut islands {
+        *island = island.with_rotation(Quat::from_rotation_y(time.elapsed_secs() * ROT_SPEED));
     }
-
-    // debug!("\n\n")
-
-    // debug!("{:?}", cam.pos);
 }
 
 #[allow(unused)]
