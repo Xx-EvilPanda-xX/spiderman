@@ -4,8 +4,8 @@ use bevy::color::palettes::css::{PURPLE, RED};
 use bevy::window::PrimaryWindow;
 use bevy::pbr::PointLightShadowMap;
 
-use crate::physics;
-use crate::physics::collision::ShouldRenderCollider;
+use crate::{physics, math};
+use crate::physics::collision::{ShouldRenderCollider, collision, RecursiveAABB, TriangleData};
 
 #[derive(Component)]
 pub struct Island1;
@@ -29,10 +29,21 @@ const ROT_SPEED: f32 = 0.2;
 
 pub fn update(
     mut islands: Query<&mut Transform, With<Island1>>,
+    collision_data: Query<(&RecursiveAABB, &TriangleData, &GlobalTransform)>,
+    cam: Single<&CameraState>,
     time: Res<Time>,
 ) {
     for mut island in &mut islands {
         *island = island.with_rotation(Quat::from_rotation_y(time.elapsed_secs() * ROT_SPEED));
+    }
+
+    let ray = math::Ray3d::new(cam.pos, cam.forward);
+
+    for (recursive_aabb, triangle_data, transform) in &collision_data {
+        let collisions = collision(ray, recursive_aabb, triangle_data, &transform.compute_matrix());
+        if collisions.len() > 0 {
+            debug!("{:?}", collisions);
+        }
     }
 }
 
@@ -63,7 +74,7 @@ pub fn setup(
         default_color: RED.into(),
     });
 
-    let island_handle = server.load(GltfAssetLabel::Scene(0).from_asset("Island1Export.gltf"));
+    let island_handle = server.load(GltfAssetLabel::Scene(0).from_asset("island1/Island1Export.gltf"));
 
     commands.spawn((
         SceneRoot(island_handle.clone()),
@@ -72,8 +83,18 @@ pub fn setup(
         physics::collision::Collidable(vec![String::from("Cube.002")]),
     ));
 
+    // let cube_handle = server.load(GltfAssetLabel::Scene(0).from_asset("cube/untitled.gltf"));
+
+    // commands.spawn((
+    //     SceneRoot(cube_handle.clone()),
+    //     Transform::from_scale(Vec3::new(5.0, 5.0, 5.0)),
+    //     physics::collision::Collidable(vec![String::from("Cube")]),
+    // ));
+
+    let bruh = Cuboid::new(50.0, 1.0, 50.0);
+
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(50.0, 1.0, 50.0))),
+        Mesh3d(meshes.add(bruh)),
         MeshMaterial3d(materials.add(Color::from(PURPLE))),
         Transform::from_translation(Vec3::new(0.0, -5.0, 0.0)),
     ));

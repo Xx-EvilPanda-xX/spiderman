@@ -1,5 +1,8 @@
 use bevy::{prelude::*, pbr::wireframe::Wireframe};
 use std::f32;
+
+use crate::math::{self, plane_from_points, ray_plane_intersect};
+
 // Contains the GLTF mesh name for the collidable geometry
 #[derive(Component)]
 pub struct Collidable(pub Vec<String>);
@@ -12,10 +15,8 @@ pub struct RecursiveAABB {
     enclosed: Vec<usize>, // list of indices into the triangle buffer
 }
 
-pub const ALL_ENCOMPASSING_AABB: AABB = AABB {
-    min: Vec3 { x: f32::MIN, y: f32::MIN, z: f32::MIN },
-    max: Vec3 { x: f32::MAX, y: f32::MAX, z: f32::MAX }
-};
+#[derive(Component)]
+pub struct TriangleData(Vec<Triangle3d>);
 
 #[derive(Default, Clone, Copy, Debug, Component)]
 pub struct AABB {
@@ -36,6 +37,45 @@ impl AABB {
 pub struct ShouldRenderCollider(bool);
 
 const TRIANGLE_LIMIT: usize = 25;
+const RENDER_AABBS: bool = false;
+
+// its about 5-6 times faster to use an aabb hierarchy with model of about 3800 triangles.
+// this performance gain will increase expontentially as triangle count increases.
+// there is still room for improvement by doing collision calculations in local object space instead of world space
+pub fn collision(ray: math::Ray3d, recursive_aabb: &RecursiveAABB, triangle_data: &TriangleData, transform: &Mat4) -> Vec<Vec3> {
+    let mut aabb_vertices = aabb_vertices(recursive_aabb.aabb);
+
+    for vertex in &mut aabb_vertices {
+        *vertex = transform.transform_point3(*vertex);
+    }
+
+    let mut collisions = Vec::new();
+
+    if ray_intersects_box(ray, &aabb_vertices) {
+        if let Some(next) = &recursive_aabb.next {
+            for next_recursive_aabb in next {
+                collisions.append(&mut collision(ray, next_recursive_aabb, triangle_data, transform));
+            }
+        } else {
+            for index in &recursive_aabb.enclosed {
+                let mut vertices = triangle_data.0[*index].vertices;
+
+                for vertex in &mut vertices {
+                    *vertex = transform.transform_point3(*vertex);
+                }
+
+                let plane = plane_from_points(vertices[0], vertices[1], vertices[2]);
+                let intersection = ray_plane_intersect(ray, plane);
+                let point = ray.at(intersection);
+                if point_in_tri(point, &vertices) {
+                    collisions.push(point);
+                }
+            }
+        }
+    }
+
+    collisions
+}
 
 // IMPORTANT: under the hood asset server spawns child entities for both the meshes and the nodes of the object, both of which have a Name component.
 // NODES ARE PARENTS OF MESHES
@@ -67,6 +107,7 @@ pub fn construct_collision_trees(
             let mut recursive_aabb = RecursiveAABB { aabb: root, next: None, enclosed: all_indices };
             divide_aabb(&mut recursive_aabb, TRIANGLE_LIMIT, &triangles, &mut commands, entity);
             commands.entity(entity).insert(recursive_aabb);
+            commands.entity(entity).insert(TriangleData(triangles));
         }
     }
 }
@@ -143,7 +184,7 @@ pub fn add_collider_wireframes(
             (aabb.min.z + aabb.max.z) / 2.0,
         );
 
-        if should_render_collider.0 {
+        if should_render_collider.0 && RENDER_AABBS {
             commands.entity(entity).insert((
                 Mesh3d(mesh_assets.add(Cuboid::from_corners(aabb.min, aabb.max))), // HOLY FUCK CUBOID DOCS ARE ASS
                 Transform::from_translation(center), // Offset the fucky cubiod bs
@@ -190,33 +231,24 @@ fn find_triangles_within_bound(triangles: &[Triangle3d], indices: &[usize], boun
         {
             contained.push(*index);
         } else { // second case, when a portion of the triangle passes though the aabb, with including a vertex
-            // find vertices of the aabb, start at min and rotate clockwise at the bottom, then max and rotate clockwise
-            let p1 = bound.min;
-            let p2 = Vec3::new(bound.min.x, bound.min.y, bound.max.z);
-            let p3 = Vec3::new(bound.max.x, bound.min.y, bound.max.z);
-            let p4 = Vec3::new(bound.max.x, bound.min.y, bound.min.z);
-
-            let p5 = bound.max;
-            let p6 = Vec3::new(bound.max.x, bound.max.y, bound.min.z);
-            let p7 = Vec3::new(bound.min.x, bound.max.y, bound.min.z);
-            let p8 = Vec3::new(bound.min.x, bound.max.y, bound.max.z);
+            let v = aabb_vertices(bound);
 
             // find whether edge of the aabb intersects the triangle
             // edges start with the bottom vertices connected, then the top vertices connected, then the top and bottom connected
-            let e1 = line_intersects_triangle(p1, p2, triangle);
-            let e2 = line_intersects_triangle(p2, p3, triangle);
-            let e3 = line_intersects_triangle(p3, p4, triangle);
-            let e4 = line_intersects_triangle(p4, p1, triangle);
+            let e1 = line_intersects_triangle(v[0], v[1], triangle);
+            let e2 = line_intersects_triangle(v[1], v[2], triangle);
+            let e3 = line_intersects_triangle(v[2], v[3], triangle);
+            let e4 = line_intersects_triangle(v[3], v[0], triangle);
 
-            let e5 = line_intersects_triangle(p5, p6, triangle);
-            let e6 = line_intersects_triangle(p6, p7, triangle);
-            let e7 = line_intersects_triangle(p7, p8, triangle);
-            let e8 = line_intersects_triangle(p8, p5, triangle);
+            let e5 = line_intersects_triangle(v[4], v[5], triangle);
+            let e6 = line_intersects_triangle(v[5], v[6], triangle);
+            let e7 = line_intersects_triangle(v[6], v[7], triangle);
+            let e8 = line_intersects_triangle(v[7], v[4], triangle);
 
-            let e9 = line_intersects_triangle(p1, p7, triangle);
-            let e10 = line_intersects_triangle(p2, p8, triangle);
-            let e11 = line_intersects_triangle(p3, p5, triangle);
-            let e12 = line_intersects_triangle(p4, p6, triangle);
+            let e9 = line_intersects_triangle(v[0], v[6], triangle);
+            let e10 = line_intersects_triangle(v[1], v[7], triangle);
+            let e11 = line_intersects_triangle(v[2], v[4], triangle);
+            let e12 = line_intersects_triangle(v[3], v[5], triangle);
 
             if e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8 || e9 || e10 || e11 || e12 {
                 contained.push(*index);
@@ -247,6 +279,68 @@ fn point_in_aabb(point: Vec3, aabb: AABB) -> bool {
     within
 }
 
+// find vertices of the aabb, start at min and rotate clockwise at the bottom, then max and rotate clockwise
+pub fn aabb_vertices(aabb: AABB) -> [Vec3; 8] {
+    let p1 = aabb.min;
+    let p2 = Vec3::new(aabb.min.x, aabb.min.y, aabb.max.z);
+    let p3 = Vec3::new(aabb.max.x, aabb.min.y, aabb.max.z);
+    let p4 = Vec3::new(aabb.max.x, aabb.min.y, aabb.min.z);
+
+    let p5 = aabb.max;
+    let p6 = Vec3::new(aabb.max.x, aabb.max.y, aabb.min.z);
+    let p7 = Vec3::new(aabb.min.x, aabb.max.y, aabb.min.z);
+    let p8 = Vec3::new(aabb.min.x, aabb.max.y, aabb.max.z);
+
+    [p1, p2, p3, p4, p5, p6, p7, p8]
+}
+
+// finds planes of box and tests for itersection. Assumes vertices are in fact those of a box and that
+// they come in a pre specified order (starting on the bottom at one point, rotating clockwise, then top starting opposite the bottom starting point, then also rotate clockwise)
+pub fn ray_intersects_box(ray: math::Ray3d, v: &[Vec3; 8]) -> bool {
+    // parallel set 1
+    let p1 = math::plane_from_points(v[0], v[1], v[7]);
+    let p2 = math::plane_from_points(v[3], v[2], v[4]);
+
+    // parallel set 2
+    let p3 = math::plane_from_points(v[0], v[3], v[5]);
+    let p4 = math::plane_from_points(v[1], v[2], v[4]);
+
+    // parallel set 3
+    let p5 = math::plane_from_points(v[0], v[1], v[2]);
+    let p6 = math::plane_from_points(v[4], v[5], v[6]);
+
+    // intersections
+    let mut tmp;
+
+    // find intersection times with each plane and order by earliest to latest
+    let t1 = math::ray_plane_intersect(ray, p1);
+    let t2 = math::ray_plane_intersect(ray, p2);
+    tmp = t1;
+    let t1 = t1.min(t2);
+    let t2 = tmp.max(t2);
+
+    let t3 = math::ray_plane_intersect(ray, p3);
+    let t4 = math::ray_plane_intersect(ray, p4);
+    tmp = t3;
+    let t3 = t3.min(t4);
+    let t4 = tmp.max(t4);
+
+    let t5 = math::ray_plane_intersect(ray, p5);
+    let t6 = math::ray_plane_intersect(ray, p6);
+    tmp = t5;
+    let t5 = t5.min(t6);
+    let t6 = tmp.max(t6);
+
+    // repeatedly trim the intersection, seeing if is any is left by the end
+    let min = t1.max(t3);
+    let max = t2.min(t4);
+
+    let min = min.max(t5);
+    let max = max.min(t6);
+
+    min < max
+}
+
 // returns whether the line between the two points intersects the triangle, where it does so, and "when" (t value) it does so
 // only returns true if the intersection is BOTH in the triangle in between the two points;
 fn line_intersects_triangle(p1: Vec3, p2: Vec3, triangle: &Triangle3d) -> bool {
@@ -256,15 +350,15 @@ fn line_intersects_triangle(p1: Vec3, p2: Vec3, triangle: &Triangle3d) -> bool {
     let plane = math::plane_from_points(triangle.vertices[0], triangle.vertices[1], triangle.vertices[2]);
     let t = math::ray_plane_intersect(ray, plane);
     let intersection = ray.at(t);
-    let in_triangle = point_in_tri(intersection, triangle);
+    let in_triangle = point_in_tri(intersection, &[triangle.vertices[0], triangle.vertices[1], triangle.vertices[2]]);
     let between_points = t >= 0.0 && t <= 1.0; // special property of rays
 
     in_triangle && between_points
 }
 
 // `p` is assumed to lie on the same plane as `tri`
-pub fn point_in_tri(p: Vec3, tri: &Triangle3d) -> bool {
-    let (a, b, c) = (tri.vertices[0], tri.vertices[1], tri.vertices[2]);
+pub fn point_in_tri(p: Vec3, tri: &[Vec3; 3]) -> bool {
+    let (a, b, c) = (tri[0], tri[1], tri[2]);
     let ab = (b - a).normalize();
     let ba = (a - b).normalize();
     let ac = (c - a).normalize();

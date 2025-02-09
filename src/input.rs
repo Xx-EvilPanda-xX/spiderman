@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowCloseRequested};
 use super::game::{CameraState, Light1, Light2};
 
-const SENSITVITY: f32 = 5.0;
+const SENSITVITY: f32 = 0.05;
 const SPEED: f32 = 5.0;
 
 pub fn mouse_input(
@@ -12,11 +12,10 @@ pub fn mouse_input(
     mut camera_state: Single<&mut CameraState>,
     mut camera_transform: Single<&mut Transform, With<CameraState>>,
     window: Option<Single<&mut Window, With<PrimaryWindow>>>,
-    time: Res<Time>,
 ) {
     for d in delta_mouse.read() {
-        camera_state.yaw += d.delta.x * SENSITVITY * time.delta().as_secs_f32();
-        camera_state.pitch -= d.delta.y * SENSITVITY * time.delta().as_secs_f32();
+        camera_state.yaw += d.delta.x * SENSITVITY;
+        camera_state.pitch -= d.delta.y * SENSITVITY;
 
         camera_state.pitch = camera_state.pitch.clamp(-89.9, 89.9);
     }

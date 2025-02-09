@@ -15,6 +15,13 @@ pub struct Plane {
 }
 
 impl Ray3d {
+    pub fn new(origin: Vec3, dir: Vec3) -> Self {
+        Self {
+            origin,
+            dir
+        }
+    }
+
     pub fn at(&self, t: f32) -> Vec3 {
         self.origin + t * self.dir
     }
