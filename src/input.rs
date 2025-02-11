@@ -95,6 +95,10 @@ pub fn keyboard_input(
         camera_state.pos.y -= speed;
     }
 
+    if input.pressed(KeyCode::KeyV) {
+        debug!("{:?}, {:?}", camera_state.yaw, camera_state.pitch);
+    }
+
     if input.pressed(KeyCode::Digit1) {
         set.p1().translation = set.p0().translation.clone();
     }
