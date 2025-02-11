@@ -42,7 +42,7 @@ pub fn update(
     for (recursive_aabb, triangle_data, transform) in &collision_data {
         let collisions = collision(ray, recursive_aabb, triangle_data, &transform.compute_matrix());
         if collisions.len() > 0 {
-            // debug!("{:?}", collisions);
+            debug!("{:?}", collisions);
         }
     }
 }
@@ -74,22 +74,22 @@ pub fn setup(
         default_color: RED.into(),
     });
 
-    // let island_handle = server.load(GltfAssetLabel::Scene(0).from_asset("island1/Island1Export.gltf"));
-
-    // commands.spawn((
-    //     SceneRoot(island_handle.clone()),
-    //     Transform::from_scale(Vec3::new(0.1, 0.1, 0.1)),
-    //     Island1,
-    //     physics::collision::Collidable(vec![String::from("Cube.002")]),
-    // ));
-
-    let cube_handle = server.load(GltfAssetLabel::Scene(0).from_asset("cube/untitled.gltf"));
+    let island_handle = server.load(GltfAssetLabel::Scene(0).from_asset("island1/Island1Export.gltf"));
 
     commands.spawn((
-        SceneRoot(cube_handle.clone()),
-        Transform::from_scale(Vec3::new(5.0, 5.0, 5.0)),
-        physics::collision::Collidable(vec![String::from("Cube")]),
+        SceneRoot(island_handle.clone()),
+        Transform::from_scale(Vec3::new(0.1, 0.1, 0.1)),
+        Island1,
+        physics::collision::Collidable(vec![String::from("Cube.002")]),
     ));
+
+    // let cube_handle = server.load(GltfAssetLabel::Scene(0).from_asset("cube/untitled.gltf"));
+
+    // commands.spawn((
+    //     SceneRoot(cube_handle.clone()),
+    //     Transform::from_scale(Vec3::new(5.0, 5.0, 5.0)),
+    //     physics::collision::Collidable(vec![String::from("Cube")]),
+    // ));
 
     let bruh = Cuboid::new(50.0, 1.0, 50.0);
 
@@ -120,9 +120,6 @@ pub fn setup(
     commands.spawn((
         Camera3d::default(),
         CameraState {
-            pos: Vec3::new(0.8872137, 15.320961, -5.989807),
-            yaw: 76.65002,
-            pitch:  -63.199863,
             ..default()
         }
     ));

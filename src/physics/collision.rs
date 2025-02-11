@@ -10,7 +10,6 @@ pub struct Collidable(pub Vec<String>);
 // splits a mesh up into 8 smaller bounding boxes recursively
 #[derive(Default, Component, Debug)]
 pub struct RecursiveAABB {
-    no_tree: Option<Box<RecursiveAABB>>,
     aabb: AABB,
     next: Option<Vec<RecursiveAABB>>,
     enclosed: Vec<usize>, // list of indices into the triangle buffer
@@ -43,28 +42,12 @@ const RENDER_AABBS: bool = false;
 
 // remove duplicate collisions
 pub fn collision(ray: math::Ray3d, recursive_aabb: &RecursiveAABB, triangles: &Triangles, transform: &Mat4) -> Vec<Vec3> {
-    // debug!("ray: {:?}", ray);
     let old = collision_internal(ray, recursive_aabb, triangles, transform);
-    // debug!("Finished yes tree collision detection.");
     let mut new = Vec::new();
 
     for c in &old {
         if !new.contains(c) {
             new.push(c.clone());
-        }
-    }
-
-    if let Some(no_tree) = &recursive_aabb.no_tree {
-        let no_tree_collisions = collision_internal(ray, &no_tree, triangles, transform);
-
-        // for (tree, no_tree) in new.iter().zip(no_tree_collisions.iter()) {
-        //     if tree != no_tree {
-        //         debug!("(tree, no tree): {:?}, {:?}", tree, no_tree);
-        //     }
-        // }
-
-        if no_tree_collisions.len() != new.len() {
-            debug!("(tree, no tree): {:?}, {:?}", new, no_tree_collisions);
         }
     }
 
@@ -84,10 +67,6 @@ fn collision_internal(ray: math::Ray3d, recursive_aabb: &RecursiveAABB, triangle
     let mut collisions = Vec::new();
 
     if ray_intersects_box(ray, &aabb_vertices).0 {
-        if recursive_aabb.enclosed.contains(&86) {
-            // debug!("this aabb has 86. {:#?}", recursive_aabb);
-        }
-
         if let Some(next) = &recursive_aabb.next {
             for next_recursive_aabb in next {
                 collisions.append(&mut collision_internal(ray, next_recursive_aabb, triangles, transform));
@@ -105,7 +84,6 @@ fn collision_internal(ray: math::Ray3d, recursive_aabb: &RecursiveAABB, triangle
                 let point = ray.at(intersection);
                 if point_in_tri(point, &vertices) {
                     collisions.push(point);
-                    // debug!("index: {}, triangle {:?}", index, vertices);
                 }
             }
         }
@@ -141,7 +119,7 @@ pub fn construct_collision_trees(
 
             let all_indices: Vec<usize> = (0..(triangles.len() - 1)).collect();
             let root = find_aabb(&triangles);
-            let mut recursive_aabb = RecursiveAABB { no_tree: Some(Box::new(RecursiveAABB { no_tree: None, aabb: root, next: None, enclosed: all_indices.clone() })), aabb: root, next: None, enclosed: all_indices };
+            let mut recursive_aabb = RecursiveAABB { aabb: root, next: None, enclosed: all_indices };
             divide_aabb(&mut recursive_aabb, TRIANGLE_LIMIT, &triangles, &mut commands, entity);
             commands.entity(entity).insert(recursive_aabb);
             commands.entity(entity).insert(Triangles(triangles));
@@ -189,9 +167,6 @@ fn divide_aabb(aabb: &mut RecursiveAABB, triangle_limit: usize, triangles: &[Tri
 
                 let next_aabb_bound = AABB::new(Vec3::new(min_x, min_y, min_z), Vec3::new(max_x, max_y, max_z));
                 let next_enclosed = find_triangles_within_bound(&triangles, &aabb.enclosed, next_aabb_bound);
-                if next_enclosed.contains(&86) {
-                    // debug!("This aabb subdivision contains triangle 86. size: {}", );
-                }
 
                 next_aabbs[index] = next_aabb_bound;
                 next_encloseds[index] = next_enclosed;
@@ -201,7 +176,7 @@ fn divide_aabb(aabb: &mut RecursiveAABB, triangle_limit: usize, triangles: &[Tri
     }
 
     let iter = next_aabbs.iter().zip(next_encloseds.iter()).map(
-        |(aabb, enclosed)| RecursiveAABB { no_tree: None, aabb: *aabb, next: None, enclosed: enclosed.clone() }
+        |(aabb, enclosed)| RecursiveAABB { aabb: *aabb, next: None, enclosed: enclosed.clone() }
     );
 
     aabb.next = Some(iter.collect());
@@ -258,7 +233,6 @@ fn find_aabb(triangles: &[Triangle3d]) -> AABB {
 }
 
 // find all triangles contained in a certain aabb, only using triangles included in 'indices'
-// TODO: fix bug in this. sometimes it excludes triangles for some reason
 fn find_triangles_within_bound(triangles: &[Triangle3d], indices: &[usize], bound: AABB) -> Vec<usize> {
     let mut contained = Vec::new();
 
@@ -351,6 +325,7 @@ pub fn aabb_vertices(aabb: AABB) -> [Vec3; 8] {
     [p1, p2, p3, p4, p5, p6, p7, p8]
 }
 
+// TODO: FIX PERPENDICULAR EDGE CASE
 // finds planes of box and tests for itersection. Assumes vertices are in fact those of a box and that
 // they come in a pre specified order (starting on the bottom at one point, rotating clockwise, then top starting opposite the bottom starting point, then also rotate clockwise)
 pub fn ray_intersects_box(ray: math::Ray3d, v: &[Vec3; 8]) -> (bool, f32, f32) {

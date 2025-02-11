@@ -96,7 +96,7 @@ pub fn keyboard_input(
     }
 
     if input.pressed(KeyCode::KeyV) {
-        debug!("{:?}, {:?}", camera_state.yaw, camera_state.pitch);
+        debug!("{:?}", camera_state.pos);
     }
 
     if input.pressed(KeyCode::Digit1) {
